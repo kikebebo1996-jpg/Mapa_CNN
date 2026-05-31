@@ -10,23 +10,45 @@
   <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
 
   <style>
+    :root {
+      --starbucks: #006241;
+      --starbucks-dark: #003b2e;
+      --bg: #f4f6f5;
+      --card: #ffffff;
+      --border: #d7ddd9;
+      --text: #1f2933;
+    }
+
+    * { box-sizing: border-box; }
+
     body {
       margin: 0;
       font-family: Arial, sans-serif;
-      background: #f4f4f4;
+      background: var(--bg);
+      color: var(--text);
     }
 
     header {
-      background: #006241;
+      background: var(--starbucks);
       color: white;
       padding: 14px 18px;
       font-size: 18px;
       font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .subtitle {
+      font-size: 12px;
+      font-weight: normal;
+      opacity: 0.9;
     }
 
     #controls {
       padding: 10px;
-      background: white;
+      background: var(--card);
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
@@ -35,30 +57,65 @@
       position: relative;
     }
 
-    select, input {
-      padding: 8px;
+    select, input, button {
+      padding: 8px 10px;
       border-radius: 8px;
       border: 1px solid #ccc;
       font-size: 14px;
+      background: white;
+      min-height: 38px;
+    }
+
+    input { min-width: 220px; }
+
+    #resetBtn {
+      background: var(--starbucks);
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    #summary {
+      background: #ffffff;
+      padding: 8px 12px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+
+    .pill {
+      background: #edf4f1;
+      border: 1px solid #d7e7df;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-weight: bold;
     }
 
     #map {
-      height: calc(100vh - 118px);
+      height: calc(100vh - 164px);
       width: 100%;
+    }
+
+    .popup {
+      min-width: 270px;
+      max-width: 330px;
     }
 
     .popup h3 {
       margin: 0 0 8px;
-      color: #006241;
+      color: var(--starbucks);
       font-size: 18px;
     }
 
     .section {
       margin-top: 8px;
       font-weight: bold;
-      color: #333;
+      color: var(--starbucks-dark);
       border-top: 1px solid #ddd;
-      padding-top: 6px;
+      padding-top: 7px;
     }
 
     .row {
@@ -66,7 +123,7 @@
       justify-content: space-between;
       gap: 14px;
       font-size: 13px;
-      margin: 3px 0;
+      margin: 4px 0;
     }
 
     .label {
@@ -78,11 +135,44 @@
       color: #222;
       text-align: right;
     }
+
+    .error {
+      display: none;
+      background: #fff3f3;
+      color: #8a1f1f;
+      border: 1px solid #f1b7b7;
+      padding: 8px 12px;
+      font-weight: bold;
+    }
+
+    @media (max-width: 760px) {
+      header {
+        font-size: 16px;
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      #controls {
+        gap: 6px;
+      }
+
+      input, select, button {
+        width: 100%;
+        font-size: 13px;
+      }
+
+      #map {
+        height: calc(100vh - 310px);
+      }
+    }
   </style>
 </head>
 
 <body>
-  <header>☕ Región Centro Norte | Mapa Ejecutivo</header>
+  <header>
+    <div>☕ Región Centro Norte | Mapa Ejecutivo</div>
+    <div class="subtitle">Filtros por DM, Cobertura, Tipo, Tier y Formato Comercial</div>
+  </header>
 
   <div id="controls">
     <input id="search" type="text" placeholder="Buscar tienda o CC" />
@@ -91,30 +181,45 @@
       <option value="">Todos los DM</option>
     </select>
 
-    <select id="estadoFilter">
-      <option value="">Todos los estados</option>
+    <select id="coberturaFilter">
+      <option value="">Todas las coberturas</option>
     </select>
 
     <select id="tierFilter">
       <option value="">Todos los Tier</option>
     </select>
 
-    <select id="formatoFilter">
-      <option value="">Todos los formatos</option>
+    <select id="tipoFilter">
+      <option value="">Todos los tipos</option>
     </select>
+
+    <select id="comercialFilter">
+      <option value="">Todos los formatos comerciales</option>
+    </select>
+
+    <button id="resetBtn" type="button">Limpiar filtros</button>
   </div>
 
+  <div id="summary">
+    <span class="pill" id="visibleCount">Tiendas visibles: 0</span>
+    <span class="pill" id="edomexCount">Estado de México: 0</span>
+    <span class="pill" id="cdmxCount">Ciudad de México: 0</span>
+    <span class="pill" id="dtCount">DT: 0</span>
+  </div>
+
+  <div id="errorBox" class="error"></div>
   <div id="map"></div>
 
   <script>
-    const map = L.map('map').setView([19.50, -99.18], 11);
+    const map = L.map("map").setView([19.50, -99.18], 11);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: 'Mapa Ejecutivo Región Centro Norte'
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "Mapa Ejecutivo Región Centro Norte"
     }).addTo(map);
 
     let allData = [];
     let markers = [];
+    let markerBounds = [];
 
     const colors = {
       "Enrique César": "#00704A",
@@ -122,22 +227,42 @@
       "Vanessa Carreño": "#8E44AD",
       "Veronica García": "#F39C12",
       "Yazmin Chabela": "#C0392B",
-      "Yazmin García": "#8D6E63"
+      "Yazmin García": "#8D6E63",
+      "Yazmin Haydee": "#8D6E63",
+      "Yazmin Chabela Guadarrama": "#C0392B",
+      "Yazmin García González": "#8D6E63"
     };
 
+    function clean(value) {
+      return String(value ?? "").trim();
+    }
+
+    function normalize(value) {
+      return clean(value)
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toUpperCase();
+    }
+
     function getColor(dm) {
-      return colors[dm] || "#006241";
+      return colors[clean(dm)] || "#006241";
     }
 
     function addOptions(id, values) {
       const select = document.getElementById(id);
-      values.sort().forEach(v => {
-        if (v) {
-          const opt = document.createElement("option");
-          opt.value = v;
-          opt.textContent = v;
-          select.appendChild(opt);
-        }
+
+      while (select.options.length > 1) {
+        select.remove(1);
+      }
+
+      const cleanValues = [...new Set(values.map(clean).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+
+      cleanValues.forEach(v => {
+        const opt = document.createElement("option");
+        opt.value = v;
+        opt.textContent = v;
+        select.appendChild(opt);
       });
     }
 
@@ -149,11 +274,11 @@
           <div class="row"><span class="label">CC</span><span class="value">${d["CC"] || ""}</span></div>
           <div class="row"><span class="label">DM</span><span class="value">${d["DM"] || ""}</span></div>
           <div class="row"><span class="label">Apertura</span><span class="value">${d["Fecha de Apertura"] || ""}</span></div>
-          <div class="row"><span class="label">Tier</span><span class="value">${d["TIER"] || ""}</span></div>
           <div class="row"><span class="label">Municipio</span><span class="value">${d["Municipio o Delegación"] || ""}</span></div>
-          <div class="row"><span class="label">Estado</span><span class="value">${d["Estado"] || ""}</span></div>
-          <div class="row"><span class="label">Formato</span><span class="value">${d["Formato"] || ""}</span></div>
-          <div class="row"><span class="label">Comercial</span><span class="value">${d["Formato - Comercial"] || ""}</span></div>
+          <div class="row"><span class="label">Cobertura</span><span class="value">${d["Cobertura"] || ""}</span></div>
+          <div class="row"><span class="label">Tipo</span><span class="value">${d["Formato"] || ""}</span></div>
+          <div class="row"><span class="label">Formato Comercial</span><span class="value">${d["Formato - Comercial"] || ""}</span></div>
+          <div class="row"><span class="label">Tier</span><span class="value">${d["TIER"] || ""}</span></div>
 
           <div class="section">🤝 Partner</div>
           <div class="row"><span class="label">Rolling</span><span class="value">${d["Rolling"] || ""}</span></div>
@@ -166,6 +291,8 @@
           <div class="row"><span class="label">Labor</span><span class="value">${d["Labor"] || d["Labor %"] || ""}</span></div>
           <div class="row"><span class="label">Dif Labor %</span><span class="value">${d["Dif Labor%"] || d["Dif Labor %"] || ""}</span></div>
           <div class="row"><span class="label">OMT</span><span class="value">${d["OMT #"] || ""}</span></div>
+          <div class="row"><span class="label">Costo</span><span class="value">${d["Costo"] || ""}</span></div>
+          <div class="row"><span class="label">Dif costo %</span><span class="value">${d["Dif costo%"] || d["Dif costo %"] || ""}</span></div>
           <div class="row"><span class="label">EBITDA</span><span class="value">${d["EBITDA"] || ""}</span></div>
           <div class="row"><span class="label">Dif EBITDA</span><span class="value">${d["Dif EBITDA %"] || d["dif EBITDA %"] || ""}</span></div>
 
@@ -176,43 +303,56 @@
           <div class="row"><span class="label">CTC</span><span class="value">${d["CTC"] || ""}</span></div>
 
           <div class="section">🚗 Drive Thru</div>
-          <div class="row"><span class="label">DT Time</span><span class="value">${d["DT Time"] || "N/A"}</span></div>
-          <div class="row"><span class="label">DT AA</span><span class="value">${d["Tiempo DT AA"] || "N/A"}</span></div>
+          <div class="row"><span class="label">DT Time</span><span class="value">${d["DT Time"] || "No hay valor"}</span></div>
+          <div class="row"><span class="label">DT AA</span><span class="value">${d["Tiempo DT AA"] || "No hay valor"}</span></div>
 
           <div class="section">📅 Corte</div>
           <div class="row"><span class="label">YTD</span><span class="value">${d["Corte YTD"] || ""}</span></div>
-        </div>
-      `;
+        </div>`;
     }
 
     function clearMarkers() {
       markers.forEach(m => map.removeLayer(m));
       markers = [];
+      markerBounds = [];
+    }
+
+    function updateSummary(filtered) {
+      const edomex = filtered.filter(d => normalize(d["Cobertura"]).includes("ESTADO")).length;
+      const cdmx = filtered.filter(d => normalize(d["Cobertura"]).includes("CIUDAD")).length;
+      const dt = filtered.filter(d => normalize(d["Formato"]).includes("DRIVE")).length;
+
+      document.getElementById("visibleCount").textContent = `Tiendas visibles: ${filtered.length}`;
+      document.getElementById("edomexCount").textContent = `Estado de México: ${edomex}`;
+      document.getElementById("cdmxCount").textContent = `Ciudad de México: ${cdmx}`;
+      document.getElementById("dtCount").textContent = `DT: ${dt}`;
     }
 
     function renderMap() {
       clearMarkers();
 
-      const search = document.getElementById("search").value.toLowerCase();
-      const dm = document.getElementById("dmFilter").value;
-      const estado = document.getElementById("estadoFilter").value;
-      const tier = document.getElementById("tierFilter").value;
-      const formato = document.getElementById("formatoFilter").value;
+      const search = normalize(document.getElementById("search").value);
+      const dm = clean(document.getElementById("dmFilter").value);
+      const cobertura = clean(document.getElementById("coberturaFilter").value);
+      const tier = clean(document.getElementById("tierFilter").value);
+      const tipo = clean(document.getElementById("tipoFilter").value);
+      const comercial = clean(document.getElementById("comercialFilter").value);
 
       const filtered = allData.filter(d => {
-        return (!search || 
-          String(d["CC Nombre"]).toLowerCase().includes(search) ||
-          String(d["CC"]).toLowerCase().includes(search)
-        )
-        && (!dm || d["DM"] === dm)
-        && (!estado || d["Estado"] === estado)
-        && (!tier || d["TIER"] === tier)
-        && (!formato || d["Formato"] === formato);
+        const nombre = normalize(d["CC Nombre"]);
+        const cc = normalize(d["CC"]);
+
+        return (!search || nombre.includes(search) || cc.includes(search))
+          && (!dm || clean(d["DM"]) === dm)
+          && (!cobertura || clean(d["Cobertura"]) === cobertura)
+          && (!tier || clean(d["TIER"]) === tier)
+          && (!tipo || clean(d["Formato"]) === tipo)
+          && (!comercial || clean(d["Formato - Comercial"]) === comercial);
       });
 
       filtered.forEach(d => {
-        const lat = parseFloat(d["Latitud"]);
-        const lng = parseFloat(d["Longitud"]);
+        const lat = parseFloat(clean(d["Latitud"]));
+        const lng = parseFloat(clean(d["Longitud"]));
 
         if (!isNaN(lat) && !isNaN(lng)) {
           const marker = L.circleMarker([lat, lng], {
@@ -225,23 +365,60 @@
 
           marker.bindPopup(popupTemplate(d));
           markers.push(marker);
+          markerBounds.push([lat, lng]);
         }
       });
+
+      updateSummary(filtered);
+
+      if (markerBounds.length > 0) {
+        map.fitBounds(markerBounds, { padding: [25, 25], maxZoom: 13 });
+      }
     }
 
     Papa.parse("data.csv", {
       download: true,
       header: true,
+      skipEmptyLines: true,
+      transformHeader: header => clean(header),
       complete: function(results) {
-        allData = results.data.filter(d => d["Latitud"] && d["Longitud"]);
+        const errorBox = document.getElementById("errorBox");
 
-        addOptions("dmFilter", [...new Set(allData.map(d => d["DM"]))]);
-        addOptions("estadoFilter", [...new Set(allData.map(d => d["Estado"]))]);
-        addOptions("tierFilter", [...new Set(allData.map(d => d["TIER"]))]);
-        addOptions("formatoFilter", [...new Set(allData.map(d => d["Formato"]))]);
+        allData = results.data
+          .map(row => {
+            const cleanRow = {};
+            Object.keys(row || {}).forEach(key => {
+              cleanRow[clean(key)] = row[key];
+            });
+            return cleanRow;
+          })
+          .filter(d => clean(d["CC Nombre"]) || clean(d["CC"]));
 
+        addOptions("dmFilter", allData.map(d => d["DM"]));
+        addOptions("coberturaFilter", allData.map(d => d["Cobertura"]));
+        addOptions("tierFilter", allData.map(d => d["TIER"]));
+        addOptions("tipoFilter", allData.map(d => d["Formato"]));
+        addOptions("comercialFilter", allData.map(d => d["Formato - Comercial"]));
+
+        errorBox.style.display = "none";
         renderMap();
+      },
+      error: function(err) {
+        const errorBox = document.getElementById("errorBox");
+        errorBox.textContent = "No se pudo leer data.csv. Verifica que el archivo esté en el mismo repositorio y se llame exactamente data.csv.";
+        errorBox.style.display = "block";
+        console.error("Error leyendo CSV:", err);
       }
+    });
+
+    document.getElementById("resetBtn").addEventListener("click", () => {
+      document.getElementById("search").value = "";
+      document.getElementById("dmFilter").value = "";
+      document.getElementById("coberturaFilter").value = "";
+      document.getElementById("tierFilter").value = "";
+      document.getElementById("tipoFilter").value = "";
+      document.getElementById("comercialFilter").value = "";
+      renderMap();
     });
 
     document.querySelectorAll("select, input").forEach(el => {
